@@ -30,6 +30,7 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include "DynamicCloud.h"
 
 /*
 	PBR example main class
@@ -117,7 +118,7 @@ public:
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
 	const std::string assetpath = "";
 #else
-	const std::string assetpath = "./../data/";
+	const std::string assetpath = "../../data/";
 #endif
 
 	enum PBRWorkflows{ PBR_WORKFLOW_METALLIC_ROUGHNESS = 0, PBR_WORKFLOW_SPECULAR_GLOSSINESS = 1 };
@@ -271,6 +272,9 @@ public:
 
 	void recordCommandBuffer()
 	{
+		m_dynamicCloud->m_paramter.resolutionX = width;
+		m_dynamicCloud->m_paramter.resolutionY = height;
+
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 
 		VkCommandBufferBeginInfo cmdBufferBeginInfo{};
@@ -321,7 +325,12 @@ public:
 			vkCmdBindPipeline(currentCB, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines["skybox"]);
 			models.skybox.draw(currentCB);
 		}
+		if (m_dynamicCloud != nullptr)
+		{
+			m_dynamicCloud->Draw(currentCB);
+		}
 
+	
 		vkglTF::Model &model = models.scene;
 
 		vkCmdBindVertexBuffers(currentCB, 0, 1, &model.vertices.buffer, offsets);
@@ -346,6 +355,7 @@ public:
 		}
 
 		// User interface
+	
 		ui->draw(currentCB);
 
 		vkCmdEndRenderPass(currentCB);
@@ -398,6 +408,7 @@ public:
 			shaderMaterialBuffer.destroy();
 		}
 		VkDeviceSize bufferSize = shaderMaterials.size() * sizeof(ShaderMaterial);
+		if (bufferSize == 0) return;
 		Buffer stagingBuffer;
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, bufferSize, &stagingBuffer.buffer, &stagingBuffer.memory, shaderMaterials.data()));
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bufferSize, &shaderMaterialBuffer.buffer, &shaderMaterialBuffer.memory));
@@ -467,8 +478,9 @@ public:
 
 		textures.empty.loadFromFile(assetpath + "textures/empty.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
 
+		//std::string sceneFile = "D:\\models\\fbx75b.glb"; ////"models/DamagedHelmet/glTF-Embedded/DamagedHelmet.gltf";
 		std::string sceneFile = assetpath + "models/DamagedHelmet/glTF-Embedded/DamagedHelmet.gltf";
-		std::string envMapFile = assetpath + "environments/papermill.ktx";
+		std::string envMapFile = assetpath + "environments/env3.ktx";
 		for (size_t i = 0; i < args.size(); i++) {
 			if ((std::string(args[i]).find(".gltf") != std::string::npos) || (std::string(args[i]).find(".glb") != std::string::npos)) {
 				std::ifstream file(args[i]);
@@ -491,7 +503,7 @@ public:
 
 		loadScene(sceneFile.c_str());
 		models.skybox.loadFromFile(assetpath + "models/Box/glTF-Embedded/Box.gltf", vulkanDevice, queue);
-
+		//models.skybox.loadFromFile(assetpath + "models/test/OilModule.gltf", vulkanDevice, queue);
 		loadEnvironment(envMapFile.c_str());
 	}
 
@@ -1774,6 +1786,7 @@ public:
 		shaderValuesSkybox.projection = camera.matrices.perspective;
 		shaderValuesSkybox.view = camera.matrices.view;
 		shaderValuesSkybox.model = glm::mat4(glm::mat3(camera.matrices.view));
+		m_dynamicCloud->UpdateUniformBuffers();
 	}
 
 	void updateParams()
@@ -1791,7 +1804,7 @@ public:
 		updateUniformBuffers();
 		updateOverlay();
 	}
-
+	DynamicCloud* m_dynamicCloud = nullptr;
 	void prepare()
 	{
 		VulkanExampleBase::prepare();
@@ -1844,6 +1857,17 @@ public:
 		updateOverlay();
 
 		prepared = true;
+
+		if (m_dynamicCloud == nullptr)
+		{
+			if (m_dynamicCloud == nullptr)
+			{
+				CloudParams param = { 40000,  (float)width, (float)height, "../../data/"};
+				DeviceDescriptor deviceDescriptor = { vulkanDevice, renderPass, queue, pipelineCache, settings.sampleCount,&uniformBuffers[0].scene.descriptor, &uniformBuffers[0].params.descriptor };
+				m_dynamicCloud = new DynamicCloud(param, deviceDescriptor);//vulkanDevice, renderPass, queue, pipelineCache, settings.sampleCount
+				m_dynamicCloud->IsShow = true;
+			}
+		}
 	}
 
 	/*
@@ -1927,7 +1951,12 @@ public:
 				setupDescriptors();
 			}
 		}
-
+		if (ui->header("Cloud") && m_dynamicCloud) {
+			ImGui::InputInt("randon", &m_dynamicCloud->m_paramter.seed, 1, 3000);
+			ImGui::SliderFloat("skyColorX", &m_dynamicCloud->m_paramter.skyColor.x, 0.0f, 1.0f);
+			ImGui::SliderFloat("skyColorY", &m_dynamicCloud->m_paramter.skyColor.y, 0.0f, 1.0f);
+			ImGui::SliderFloat("skyColorZ", &m_dynamicCloud->m_paramter.skyColor.z, 0.0f, 1.0f);
+		}
 		if (ui->header("Environment")) {
 			ui->checkbox("Background", &displayBackground);
 			ui->slider("Exposure", &shaderValuesParams.exposure, 0.1f, 10.0f);
@@ -1958,6 +1987,7 @@ public:
 				shaderValuesParams.debugViewEquation = static_cast<float>(debugViewEquation);
 			}
 		}
+		
 
 		if (models.scene.animations.size() > 0) {
 			if (ui->header("Animations")) {
@@ -2044,6 +2074,7 @@ public:
 		}
 		
 		recordCommandBuffer();
+		//m_dynamicCloud->UpdateUniformBuffers();
 
 		// Update UBOs
 		updateUniformBuffers();
@@ -2088,6 +2119,7 @@ public:
 			}
 			updateParams();
 		}
+
 		if (camera.updated) {
 			updateUniformBuffers();
 		}

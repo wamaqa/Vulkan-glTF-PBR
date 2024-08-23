@@ -1,47 +1,16 @@
 #version 450
 
 //#extension GL_KHR_vulkan_glsl : require
-//#extension GL_GOOGLE_include_directive : require
+#extension GL_GOOGLE_include_directive : require
 
-layout (set = 0, binding = 0) uniform UBO 
-{
-	mat4 projection;
-	mat4 model;
-	mat4 view;
-	vec3 camPos;
-} ubo;
-
-layout (set = 0, binding = 1) uniform Params 
-{
-		vec4 lightDir;
-		float exposure;
-		float gamma;
-		float prefilteredCubeMipLevels;
-		float scaleIBLAmbient;
-		float debugViewInputs;
-		float debugViewEquation;
-} lightParams;
-
-layout (set = 0, binding = 2) uniform CloudParams {
-	vec3 skyColor;
-	float sunColourX;
-	float sunColourY;
-	float sunColourZ;
-	float height;
-	float resolutionX;
-    float resolutionY;
-	float time;
-	float speed;
-	int seed;
-} cloudParams;
+#include "includes/dynamiccommon.glsl"
 
 
-layout (location = 0) out vec4 outColor;
+
 
 #define HASHSCALE1 .1031
 #define HASHSCALE3 vec3(.1031, .1030, .0973)
 #define HASHSCALE4 vec4(1031, .1030, .0973, .1099)
-
 
 vec2 iResolution = vec2(0,0);
 int cloudType = 1;
@@ -49,7 +18,7 @@ float cloudscale = 0.01;
 vec3 sunColour = vec3(0.9,0.81,0.71);//vec3(1.0, .85, .78);
 vec3 skyColor = vec3(0.18,0.22,0.4);
 float specular = 0.0;
-vec3 cameraPos;
+
 vec2 add = vec2(1.0, 0.0);
 
 
@@ -336,12 +305,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord, vec3 raydir )
 	
 	fragColor=vec4(col,1.0);
 }
-vec4 GetWorldPositionFromDepth(mat4 invVp, vec2 uv, float depth)
-{
-	vec4 wpos = invVp * vec4(uv, depth, 1.0);
 
-	return wpos;
-}
 
 
 void main()

@@ -14,7 +14,7 @@ vec3 iMouse = vec3(.0);
 
 //varing light intensity for stars
 #define FRACTAL_SKY
-//#define PULSED_STARS //for FRACTAL_SKY only
+#define PULSED_STARS //for FRACTAL_SKY only
 
 //for use in shadertoy environment or similia
 #define SHADERTOY
@@ -38,6 +38,7 @@ vec3  contrast(vec3 valImg, float contrast)  { return clamp(contrast*(valImg-.5)
 
 float gammaCorrection(float imgVal, float gVal)  { return pow(imgVal, 1./gVal); }
 vec3  gammaCorrection(vec3 imgVal, float gVal)   { return pow(imgVal, vec3(1./gVal)); }
+
 
 //Get color luminance intensity
 float cIntensity(vec3 col) { return dot(col, vec3(.299, .587, .114)); }
@@ -84,7 +85,6 @@ float borealCloud(vec3 p)
 {
 	p+=fbm(vec3(p.x,p.y,0.0)*0.5)*2.25;
 	float a = smoothstep(.0, .9, fbm(p*2.)*2.2-1.1);
-    
 	return a<0.0 ? 0.0 : a;
 }
 
@@ -120,21 +120,6 @@ vec3 nrand3( vec2 co )
    return c;
 }
 
-#ifdef PULSED_STARS
-float starField(vec2 p)
-{
-   vec3 rnd = nrand3(p * iResolution.x);
-   float intensity = pow((1.+sin((iTime+27.)*rnd.x))*.5, 7.) ;
-   return max(rnd.x * pow(rnd.y,7.) * intensity, 0.);
-
-}
-#else
-float starField(vec2 p)
-{
-   vec3 rnd = nrand3(p * iResolution.x);
-   return pow(abs(rnd.x + rnd.y + rnd.z)/2.93,9.7);
-}
-#endif
 
 #define iterations 16
 #define formuparam 0.53 //77
@@ -152,45 +137,6 @@ float starField(vec2 p)
 #define saturation .250
 
 
-vec3 starr(vec2 UV)
-{
-    float ratio = iResolution.y/iResolution.x;
-	//get coords and direction
-	vec2 uv=UV*.3723+vec2(0.,-.085); //-mouseL;
-	uv.y*= ratio;
-	vec3 dir=vec3(uv*zoom/ratio,1.);
-
-	dir.xz*=mat2(.803, .565, .565, .803);
-	dir.xy*=mat2(.9935,.0998,.0998,.9935);
-
-    vec3 from=vec3(-0.4299,-0.7817,-0.3568);
-
-	//volumetric rendering
-	float s=0.0902,fade=.7;
-	float v=0.;
-	for (int r=0; r<volsteps; r++) {
-		vec3 p=from+s*dir*-9.9;
-		p = abs(vec3(tile)-mod(p,vec3(tile*2.))); // tiling fold
-		float pa,a=pa=0.;
-
-		for (int i=0; i<iterations; i++) {
-			p=abs(p)/dot(p,p)-formuparam; // the magic formula
-			a+=abs(length(p)-pa); // absolute sum of average change
-			pa=length(p);
-		}
-		a*=a*a; // add contrast
-		v+=fade;
-		v+=s*a*brightness*fade; // coloring based on distance
-		fade*=distfading; // distance fading
-		s+=stepsize;
-	}
-	v = contrast(v *.009, .95)-.05;
-	vec3 col = vec3(.43,.57,.97) * 1.7 * v;
-
-	col = gammaCorrection(col, .7);
-
-	return col + vec3(.67,.83,.97) * vec3(starField(UV)) * .9;
-}
 
 //besselham line function
 //creates an oriented distance field from o to b and then applies a curve with smoothstep to sharpen it into a line
@@ -239,7 +185,74 @@ vec2 cmtLen = vec2(.25)*cmtVel; //cmt lenght
         q ; //attenuation on Y}
 }
 
-#define SMOOTH_V(V,R)  { float p = position.y-.2; if(p < (V)) { float a = p/(V); R *= a *a ;  } }
+
+#define SMOOTH_V3(D,V,R)  { float p = D.y-.2; if(p < (V)) { float a = p/(V); R *= a *a ;  } }
+
+
+vec3 smoothCloud3(vec3 c, vec3 pos)
+{
+	c*=0.75-length(pos-0.5)*0.75;
+	float w=length(c);
+	c=mix(c*vec3(1.0,1.2,1.6),vec3(w)*vec3(1.,1.2,1.),w*1.25-.25);
+	return clamp(c,0.,1.);
+}
+
+vec3 renderBoreal(vec3 dir, float time)
+{
+    vec3 los = vec3(dir.x, dir.y, dir.z);
+
+   float coord1 =borealCloud(dir * vec3(1.2,1.0,1.0) + vec3(0.0,time *0.22,0.0));
+   float coord2 =borealCloud(dir * vec3(1.0,1.0,0.7) + vec3(0.0,time *0.27,0.0));
+   float coord3 =borealCloud(dir * vec3(0.8,1.0,0.6) + vec3(0.0,time *0.29,0.0));
+   float coord4 =borealCloud(dir * vec3(0.9,1.0,0.5) + vec3(0.0,time *0.20,0.0));
+  
+   vec3 boreal =  vec3(.1,1.,.5 ) * coord1 * 0.5 + vec3(.1,.9,.7) * coord2 * 0.9 + vec3(.75,.3,.99) * coord3 * 0.5 + vec3(.0,.99,.99) * coord4 * 0.57;
+
+
+   SMOOTH_V3(dir,.5,boreal);
+   SMOOTH_V3(dir,.35,boreal);
+   SMOOTH_V3(dir,.27,boreal);
+
+   smoothCloud3(boreal, dir); 
+   boreal = gammaCorrection(boreal,1.3);
+    
+   float skyRange = max( dot( dir, vec3(0,1,0)), 0.0 );
+
+   return boreal;
+}
+vec3 renderSky(vec3 rayDir, float time)
+{
+    vec3 skyPt = rayDir.xzy * 0.1 + vec3(-1.315, .39, 0.);
+    vec3 freq = vec3(0.3, 0.67, 0.87);
+
+    float ff = fractalField(skyPt,freq.z, 27);
+    float skyRange = max( dot( rayDir, vec3(0,1,0)), 0.0 );
+    ff  = min(pow(skyRange, 0.9), ff);
+
+    vec3 sky =  vec3 (.75, 1., 1.4) * .01 * pow(2.4,ff*ff*ff)  * freq;
+
+    return sky;// mix(sky, vec3(0.1,0.1,0.1), 0.10);
+}
+vec3 renderMoon(vec3 skyColor, vec3 rayDir, vec3 lightDir)
+{
+    vec3 moonColor =  vec3(1.0);//vec3(.99, .7, .8);
+    float sunAmount = max( dot( rayDir, lightDir.xyz), 0.0 );
+	float v = pow(1.0-max(rayDir.z,0.0),5.)*.5;
+	vec3  sky = vec3(.0);//vec3(v*moonColor.x*0.1 + skyColor.x * 0.9, v*moonColor.y*0.1 + skyColor.y * 0.9, v*moonColor.z * 0.1 + skyColor.z * 0.9);
+	sky = skyColor + moonColor * pow(sunAmount, 6.5) * 0.05;
+	sky = sky + moonColor * min(pow(sunAmount, 1000.0), .5)*.5;
+    return  sky;
+}
+vec3 renderStar(vec3 rayDir, float time)
+{
+   vec3 rnd = nrand3(rayDir.xy / rayDir.z * iResolution.x);
+   float intensity = pow((1.+sin((iTime+27.)*rnd.x))*.5, 7.);
+   float col = max(rnd.x * pow(rnd.y,7.) * intensity, 0.);
+
+   float skyRange = max( dot( rayDir, vec3(0,1,0)), 0.0 );
+
+   return vec3(min(pow(skyRange, 0.9), col) * col);
+}
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord, vec3 raydir )
 {
@@ -275,16 +288,9 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord, vec3 raydir )
                         vec3(.0,.99,.99)  * borealCloud(vec3(coord1*vec2(.9,.5)  , tm*0.20)) *  .57);
                         
 
-    SMOOTH_V(.5,boreal);
-    SMOOTH_V(.35,boreal);
-    SMOOTH_V(.27,boreal);
 
     boreal = smoothCloud(boreal, position);
     boreal = gammaCorrection(boreal,1.3);
-
-#ifdef EXTERNAL_TEXT
-	vec2 vCoord = vec2(v_texCoord.x, 1.-v_texCoord.y);
-#endif
 
 // Sky background (fractal)
 ////////////////////////////////////
@@ -322,9 +328,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord, vec3 raydir )
     vec3 cometA = comet(uvs);
 #endif
 
-// Terrain
-////////////////////////////////////
-         float ground = smoothstep(0.07,0.0722,fbm2(vec3((position.x-mouse.x)*5.1, position.y,.0))*(position.y-0.158)*.9+0.01);
+
 
 // Horizon Light
 ////////////////////////////////////
@@ -333,15 +337,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord, vec3 raydir )
                         vec3(.0,.7,.99) * (pos >= .585 ? (pos - .585  ) * .6  : 0.) +
                         vec3(.5,.99,.99)* (pos >= .67  ? (pos - .67) * .99 : 0.) ; 
 
-// StarField
-////////////////////////////////////
-#ifdef FRACTAL_SKY
-         vec3 starColor = vec3(starField(uv));
-#else
 
-         vec3 starColor = starr(uv);
-         SMOOTH_V(.37,starColor);
-#endif
 
 // Intensity attenuation
 ////////////////////////////////////
@@ -359,10 +355,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord, vec3 raydir )
 #endif
                 starColor  * ib *ib /*vec3(.3,.63,.97)*/  * im * im * ih * ih * is * is;
 
-		 fragColor =  vec4(boreal + sky, 1.) * ground;
+		 fragColor =  vec4(boreal + sky, 1.); 
 }
-
-
 
 
 
@@ -386,6 +380,16 @@ void main()
 	vec4 fragColor = vec4(0);
 	rayDir = vec3(rayDir.x, -rayDir.y, rayDir.z);
     mainImage(fragColor,gl_FragCoord.xy, rayDir);
-	outColor = fragColor;
+    vec3 boreal = renderBoreal(rayDir,fract(iTime));
+    vec3 sky = renderSky(rayDir,fract(iTime));
+    vec3 moon =  renderMoon(sky, rayDir,vec3(0,1,0));
+    vec3 star =  renderStar(rayDir,fract(iTime));
+    float ib = clamp(1.0-cIntensity(boreal)*3.,0.,1.);
+    ib*=ib;
+    float im = 1.0-cIntensity(moon);
+
+    sky += ((moon)*ib*ib) +star + boreal;
+
+	outColor = vec4(vec3(borealCloud(rayDir)), 1.0);//fragColor;
 }
 

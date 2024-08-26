@@ -5,9 +5,6 @@
 
 #include "includes/dynamiccommon.glsl"
 
-
-
-
 #define HASHSCALE1 .1031
 #define HASHSCALE3 vec3(.1031, .1030, .0973)
 #define HASHSCALE4 vec4(1031, .1030, .0973, .1099)
@@ -252,31 +249,7 @@ vec3 ApplyFog( in vec3  rgb, in float dis, in vec3 dir)
 	return mix(GetSky(dir), rgb, fogAmount );
 }
 
-//--------------------------------------------------------------------------
-// Calculate sun light...
-void DoLighting(inout vec3 mat, in vec3 pos, in vec3 normal, in vec3 eyeDir, in float dis)
-{
-	float h = dot(lightParams.lightDir.xyz,normal);
-	float c = max(h, 0.0)+lightParams.scaleIBLAmbient;
-	mat = mat * sunColour * c ;
-	// Specular...
-	if (h > 0.0)
-	{
-		vec3 R = reflect(lightParams.lightDir.xyz, normal);
-		float specAmount = pow( max(dot(R, normalize(eyeDir)), 0.0), 3.0)*specular;
-		mat = mix(mat, sunColour, specAmount);
-	}
-}
 
-
-//--------------------------------------------------------------------------
-vec3 CameraPath( float t )
-{
-	float m = 0.0;//1.0+(iMouse.x/iResolution.x)*300.0;
-	t = (cloudParams.time*1.5+m+657.0)*.006 + t;
-    vec2 p = 476.0*vec2( sin(3.5*t), cos(1.5*t) );
-	return vec3(35.0-p.x, -0.6, 4108.0+p.y);
-}
 
 //--------------------------------------------------------------------------
 vec3 PostEffects(vec3 rgb, vec2 uv)

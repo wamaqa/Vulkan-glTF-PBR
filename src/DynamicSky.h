@@ -13,6 +13,8 @@
 #include "VulkanglTFModel.h"
 #include <VulkanTexture.hpp>
 class VulkanDevice;
+#define AUTOUPDATEShader
+
 
 struct CloudParams
 {
@@ -27,10 +29,9 @@ struct CloudParams
 
 struct CloudUBO
 {
-	//glm::vec3(0.047, 0.081, 0.453);
-	// glm::vec3(0.18, 0.22, 0.4);
-	glm::vec3 skyColor = glm::vec3(21.0/250, 41.0/255, 86.0/255);
-	glm::vec3 sunColor = glm::vec3(0.9, 0.81, 0.71);
+	glm::vec3 skyColor = glm::vec3(0.081f, 0.151f, 0.488f);
+	glm::vec3 sunColor = glm::vec3(0.9f, 0.81f, 0.71f);
+	glm::vec3 lightDir = glm::vec3(1.0f, 0.3f, 0.1f);
 	/// <summary>
 	/// 云层高度
 	/// </summary>
@@ -40,7 +41,6 @@ struct CloudUBO
 	float time = 0;
 	float speed = 0.1;// 0.1;//0.1-1;
 	int seed = 1;//随机种子 默认3000种;
-
 };
 
 
@@ -55,25 +55,40 @@ struct DeviceDescriptor
 	VkDescriptorBufferInfo* paramsBufferInfo;
 };
 
-class DynamicCloud
+enum SceneType
+{
+	Day = 0,
+	Night = 1
+};
+
+class DynamicSky
 {
 
 public:
+	SceneType Type = SceneType::Night;
 	bool IsShow = true;
 	CloudUBO m_paramter;
-	DynamicCloud(CloudParams& param, DeviceDescriptor& deviceDescriptor);
-	~DynamicCloud();
+	DynamicSky(CloudParams& param, DeviceDescriptor& deviceDescriptor);
+	~DynamicSky();
 	void GeneateSpeed();
 	//void Init(vks::VulkanDevice* device, VkQueue transferQueue);
 	void Draw(VkCommandBuffer commandBuffer);
 	void UpdateUniformBuffers();
+#ifdef AUTOUPDATEShader
+	void UpdateShader();
+	void UpdateShader(std::string shader, VkPipeline& pipe);
+#endif // AUTOUPDATEShader
+
+
 private:
 	vkglTF::Model::Vertices vertices;
 	vkglTF::Model::Indices indices;
 
 	std::string m_dataPath = "";
-
-
+#ifdef AUTOUPDATEShader
+	time_t fileDog = 0;
+	std::map<std::string, time_t> dog_map;
+#endif // AUTOUPDATEShader
 	struct Buffer {
 		VkDevice device;
 		VkBuffer buffer = VK_NULL_HANDLE;
@@ -122,13 +137,14 @@ private:
 
 	VkSampleCountFlagBits m_multiSampleCount = VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT;
 	void InitVertices();
+	void InitDescriptor();
 	void InitPipeline();
 	VkQueue* m_queue;
 	VkDevice device;
 	VkRenderPass m_renderPass;
 	VkPipelineCache m_pipelineCache;
-	VkPipeline m_pipeline;
-
+	VkPipeline m_cloudPipeline;
+	VkPipeline m_nightPipeline;
 	vks::VulkanDevice* pVulkanDevice;
 	VkPipelineLayout m_pipelineLayout;
 	VkDescriptorPool m_descriptorPool;

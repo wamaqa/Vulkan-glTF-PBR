@@ -1,7 +1,7 @@
 #ifdef STB_IMAGE_IMPLEMENTATION
 	#define STB_IMAGE_IMPLEMENTATION
 #endif // STB_IMAGE_IMPLEMENTATION
-#include "DynamicCloud.h"
+#include "DynamicSky.h"
 
 #include <stb_image.h>
 #include <chrono>
@@ -28,12 +28,12 @@ static void LoadTexture(vks::Texture2D& texture, std::string& path, vks::VulkanD
 	stbi_image_free(buff);
 }
 
-DynamicCloud::DynamicCloud(CloudParams& param, DeviceDescriptor& deviceDescriptor)
+DynamicSky::DynamicSky(CloudParams& param, DeviceDescriptor& deviceDescriptor)
 {
 	Init(param, deviceDescriptor);
 }
 
-DynamicCloud::~DynamicCloud()
+DynamicSky::~DynamicSky()
 {
 	if(this)
 		Destroy(device);
@@ -71,7 +71,7 @@ inline VkPipelineShaderStageCreateInfo loadShaders(VkDevice device, std::string 
 	return shaderStage;
 }
 
-void DynamicCloud::Init(CloudParams& param, DeviceDescriptor& deviceDescriptor)
+void DynamicSky::Init(CloudParams& param, DeviceDescriptor& deviceDescriptor)
 {
 	pVulkanDevice = deviceDescriptor.vulkanDevice;
 	m_queue = &deviceDescriptor.queue;
@@ -85,21 +85,36 @@ void DynamicCloud::Init(CloudParams& param, DeviceDescriptor& deviceDescriptor)
 	m_paramter.resolutionX = param.resolutionX;
 	m_paramter.resolutionY = param.resolutionY;
 	m_paramter.seed = rand() % 3000;
+
+	m_paramter.sunDir = glm::vec3(1.0f, 0.6f, 0.1f);
+	m_paramter.sunColor = glm::vec3(0.9, 0.9, 0.9);
+	//m_paramter.skyColor = glm::vec3(21.0 / 250, 41.0 / 255, 86.0 / 255);
+
+
 	m_dataPath = param.dataPath;
 	InitVertices();
+	InitDescriptor();
 	InitPipeline();
 }
 
-void DynamicCloud::GeneateSpeed()
+void DynamicSky::GeneateSpeed()
 {
 	m_paramter.seed = rand() % 3000;
 }
-
-void DynamicCloud::Draw(VkCommandBuffer cmdBuffer)
+void DynamicSky::Draw(VkCommandBuffer cmdBuffer)
 {
-	if (!IsShow) return;
-	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+	std::chrono::milliseconds ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+#ifdef AUTOUPDATEShader
+	if (ms.count() - fileDog > 1000)
+	{
+		fileDog = ms.count();
+		UpdateShader();
+	}
+#endif // AUTOUPDATEShader
 
+
+	if (!IsShow) return;
+	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Type == SceneType::Day ? m_cloudPipeline : m_nightPipeline);
 
 	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &m_secneDescriptorSet, 0, nullptr);
 
@@ -107,21 +122,17 @@ void DynamicCloud::Draw(VkCommandBuffer cmdBuffer)
 	vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertices.buffer, offsets);
 	vkCmdBindIndexBuffer(cmdBuffer, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-
-
-
-
-
-	//vkCmdSetScissor(cmdBuffer, 0, 1, &scissorRect);
 	vkCmdDrawIndexed(cmdBuffer, 6, 1, 0, 0, 0);
 
 }
 
-void DynamicCloud::UpdateUniformBuffers()
+
+void DynamicSky::UpdateUniformBuffers()
 {
 	if (this)
 	{
 		std::chrono::milliseconds ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+		m_paramter.skyColor = Type == SceneType::Day ? glm::vec3(0.18f, 0.22f, 0.4f) : glm::vec3(0.05, 0.1, 0.2);
 		if (ms.count() - m_lastTime > 10)
 		{
 			m_lastTime = ms.count();
@@ -131,12 +142,62 @@ void DynamicCloud::UpdateUniformBuffers()
 			if (m_paramter.time > m_paramter.resolutionX)
 				m_paramter.time = 0.0;
 			memcpy(m_buffer.mapped, &m_paramter, sizeof(CloudUBO));
-
 		}
+	
 	}
 }
 
-void DynamicCloud::Destroy(VkDevice device)
+
+#ifdef AUTOUPDATEShader
+void DynamicSky::UpdateShader()
+{
+	UpdateShader(m_dataPath + "shaders/dynamicnight.frag", m_nightPipeline);
+	UpdateShader(m_dataPath + "shaders/dynamicday.frag", m_cloudPipeline);
+	vkDeviceWaitIdle(device);
+}
+
+void DynamicSky::UpdateShader(std::string shaderFile, VkPipeline& pipe)
+{
+		//std::string file1 = m_dataPath + "shaders/dynamicnight.frag";
+	struct _stat stat_buffer;
+	struct tm tmStruct;
+	char timeChar[26];
+	int result = _stat(shaderFile.c_str(), &stat_buffer);
+	if (dog_map.find(shaderFile) == dog_map.end())
+	{
+		dog_map[shaderFile] = stat_buffer.st_mtime;
+	}
+	else if (dog_map[shaderFile] == stat_buffer.st_mtime)
+	{
+		return;
+	}
+
+	if (dog_map[shaderFile] == 0) dog_map[shaderFile] = stat_buffer.st_mtime;
+	if (dog_map[shaderFile] != stat_buffer.st_mtime)
+	{
+		dog_map[shaderFile] = stat_buffer.st_mtime;
+		localtime_s(&tmStruct, &stat_buffer.st_mtime);
+		strftime(timeChar, sizeof(timeChar), "%Y-%m-%d %H:%M:%S", &tmStruct);
+		std::cout << "修改时间: " << timeChar << std::endl;
+		std::string cmd = "glslangValidator.exe -V " + shaderFile + " -o " + shaderFile + ".spv";
+		system(cmd.c_str());
+
+		std::ifstream is(shaderFile + ".spv", std::ios::binary | std::ios::in | std::ios::ate);
+		if (is.is_open())
+		{
+			if (pipe)vkDestroyPipeline(device, pipe, nullptr);
+			InitPipeline();
+		}
+		else
+		{
+			std::cerr << "Error: Could not open shader file \"" << shaderFile << "\"" << std::endl;
+		}
+		is.close();
+		vkDeviceWaitIdle(device);
+	}
+}
+#endif
+void DynamicSky::Destroy(VkDevice device)
 {
 	if (vertices.buffer != VK_NULL_HANDLE) {
 		vkDestroyBuffer(device, vertices.buffer, nullptr);
@@ -156,11 +217,12 @@ void DynamicCloud::Destroy(VkDevice device)
 
 	if(m_descriptorPool) vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
 	if(m_secneDescriptorSetLayout) vkDestroyDescriptorSetLayout(device, m_secneDescriptorSetLayout, nullptr);
-	if(m_pipeline)vkDestroyPipeline(device, m_pipeline, nullptr);
+	if(m_cloudPipeline)vkDestroyPipeline(device, m_cloudPipeline, nullptr);
+	if(m_nightPipeline)vkDestroyPipeline(device, m_nightPipeline, nullptr);
 	if(m_pipelineLayout)vkDestroyPipelineLayout(device, m_pipelineLayout, nullptr);
 }
 
-void DynamicCloud::InitVertices()
+void DynamicSky::InitVertices()
 {
 
 	m_buffer.create(pVulkanDevice, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, sizeof(CloudUBO));
@@ -244,6 +306,7 @@ void DynamicCloud::InitVertices()
 	delete[] indexBuffer;
 }
 
+
 inline VkWriteDescriptorSet CreateWriteDescriptorSet(uint32_t index, VkStructureType type, VkDescriptorType descriptorType, uint32_t descriptorCount, VkDescriptorSet& dstSet, VkDescriptorImageInfo* pImageInfo)
 {
 	VkWriteDescriptorSet writeDescriptorSet{};
@@ -255,11 +318,10 @@ inline VkWriteDescriptorSet CreateWriteDescriptorSet(uint32_t index, VkStructure
 	writeDescriptorSet.pImageInfo = pImageInfo;
 	return writeDescriptorSet;
 }
-
-void DynamicCloud::InitPipeline()
+void DynamicSky::InitDescriptor()
 {
 	/*
-	Descriptor pool
+Descriptor pool
 */
 	std::vector<VkDescriptorPoolSize> poolSizes = {
 		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 50 }
@@ -288,7 +350,7 @@ void DynamicCloud::InitPipeline()
 		descriptorSetAllocInfo.descriptorPool = m_descriptorPool;
 		descriptorSetAllocInfo.pSetLayouts = &m_secneDescriptorSetLayout;
 		descriptorSetAllocInfo.descriptorSetCount = 1;
-		
+
 		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &descriptorSetAllocInfo, &m_secneDescriptorSet));
 
 		std::array<VkWriteDescriptorSet, 3> writeDescriptorSets{};
@@ -327,6 +389,11 @@ void DynamicCloud::InitPipeline()
 	pipelineLayoutCI.setLayoutCount = 1;
 	pipelineLayoutCI.pSetLayouts = &m_secneDescriptorSetLayout;
 	VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCI, nullptr, &m_pipelineLayout));
+
+}
+
+void DynamicSky::InitPipeline()
+{
 
 	/*
 		Pipeline
@@ -419,10 +486,17 @@ void DynamicCloud::InitPipeline()
 	pipelineCI.pStages = shaderStages.data();
 
 	shaderStages = {
-		loadShaders(device, m_dataPath + "shaders/dynamiccloud.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-		loadShaders(device, m_dataPath + "shaders/dynamiccloud.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+		loadShaders(device, m_dataPath + "shaders/dynamicsky.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+		loadShaders(device, m_dataPath + "shaders/dynamicday.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
 	};
-	VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineCI, nullptr, &m_pipeline));
+	VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineCI, nullptr, &m_cloudPipeline));
+
+
+	shaderStages = {
+		loadShaders(device, m_dataPath + "shaders/dynamicsky.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+		loadShaders(device, m_dataPath + "shaders/dynamicnight.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+	};
+	VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, m_pipelineCache, 1, &pipelineCI, nullptr, &m_nightPipeline));
 
 	for (auto shaderStage : shaderStages) {
 		vkDestroyShaderModule(device, shaderStage.module, nullptr);

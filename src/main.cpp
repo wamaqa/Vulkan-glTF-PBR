@@ -30,7 +30,7 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "DynamicCloud.h"
+#include "DynamicSky.h"
 
 /*
 	PBR example main class
@@ -272,8 +272,8 @@ public:
 
 	void recordCommandBuffer()
 	{
-		m_dynamicCloud->m_paramter.resolutionX = width;
-		m_dynamicCloud->m_paramter.resolutionY = height;
+		m_DynamicSky->m_paramter.resolutionX = width;
+		m_DynamicSky->m_paramter.resolutionY = height;
 
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 
@@ -325,9 +325,9 @@ public:
 			vkCmdBindPipeline(currentCB, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines["skybox"]);
 			models.skybox.draw(currentCB);
 		}
-		if (m_dynamicCloud != nullptr)
+		if (m_DynamicSky != nullptr)
 		{
-			m_dynamicCloud->Draw(currentCB);
+			m_DynamicSky->Draw(currentCB);
 		}
 
 	
@@ -1786,7 +1786,7 @@ public:
 		shaderValuesSkybox.projection = camera.matrices.perspective;
 		shaderValuesSkybox.view = camera.matrices.view;
 		shaderValuesSkybox.model = glm::mat4(glm::mat3(camera.matrices.view));
-		m_dynamicCloud->UpdateUniformBuffers();
+		m_DynamicSky->UpdateUniformBuffers();
 	}
 
 	void updateParams()
@@ -1804,7 +1804,7 @@ public:
 		updateUniformBuffers();
 		updateOverlay();
 	}
-	DynamicCloud* m_dynamicCloud = nullptr;
+	DynamicSky* m_DynamicSky = nullptr;
 	void prepare()
 	{
 		VulkanExampleBase::prepare();
@@ -1858,14 +1858,15 @@ public:
 
 		prepared = true;
 
-		if (m_dynamicCloud == nullptr)
+		if (m_DynamicSky == nullptr)
 		{
-			if (m_dynamicCloud == nullptr)
+			if (m_DynamicSky == nullptr)
 			{
 				CloudParams param = { 40000,  (float)width, (float)height, "../../data/"};
 				DeviceDescriptor deviceDescriptor = { vulkanDevice, renderPass, queue, pipelineCache, settings.sampleCount,&uniformBuffers[0].scene.descriptor, &uniformBuffers[0].params.descriptor };
-				m_dynamicCloud = new DynamicCloud(param, deviceDescriptor);//vulkanDevice, renderPass, queue, pipelineCache, settings.sampleCount
-				m_dynamicCloud->IsShow = true;
+				m_DynamicSky = new DynamicSky(param, deviceDescriptor);//vulkanDevice, renderPass, queue, pipelineCache, settings.sampleCount
+				m_DynamicSky->IsShow = true;
+				m_DynamicSky->Type = SceneType::Night;
 			}
 		}
 	}
@@ -1951,11 +1952,24 @@ public:
 				setupDescriptors();
 			}
 		}
-		if (ui->header("Cloud") && m_dynamicCloud) {
-			ImGui::InputInt("randon", &m_dynamicCloud->m_paramter.seed, 1, 3000);
-			ImGui::SliderFloat("skyColorX", &m_dynamicCloud->m_paramter.skyColor.x, 0.0f, 1.0f);
-			ImGui::SliderFloat("skyColorY", &m_dynamicCloud->m_paramter.skyColor.y, 0.0f, 1.0f);
-			ImGui::SliderFloat("skyColorZ", &m_dynamicCloud->m_paramter.skyColor.z, 0.0f, 1.0f);
+		if (ui->header("Cloud") && m_DynamicSky) {
+			ImGui::InputInt("randon", &m_DynamicSky->m_paramter.seed, 1, 3000);
+
+			if(ui->header(" SkyColor")){
+				ImGui::SliderFloat("SkyR", &m_DynamicSky->m_paramter.skyColor.x, 0.0f, 1.0f);
+				ImGui::SliderFloat("SkyG", &m_DynamicSky->m_paramter.skyColor.y, 0.0f, 1.0f);
+				ImGui::SliderFloat("SkyB", &m_DynamicSky->m_paramter.skyColor.z, 0.0f, 1.0f);
+			}
+			if (ui->header(" SunColor")) {
+				ImGui::SliderFloat("sunR", &m_DynamicSky->m_paramter.sunColor.x, 0.0f, 1.0f);
+				ImGui::SliderFloat("sunG", &m_DynamicSky->m_paramter.sunColor.y, 0.0f, 1.0f);
+				ImGui::SliderFloat("sunB", &m_DynamicSky->m_paramter.sunColor.z, 0.0f, 1.0f);
+			}
+			if (ui->header(" SunDir")) {
+				ImGui::SliderFloat("R", &m_DynamicSky->m_paramter.sunDir.x, 0.0f, 1.0f);
+				ImGui::SliderFloat("G", &m_DynamicSky->m_paramter.sunDir.y, 0.0f, 1.0f);
+				ImGui::SliderFloat("B", &m_DynamicSky->m_paramter.sunDir.z, 0.0f, 1.0f);
+			}
 		}
 		if (ui->header("Environment")) {
 			ui->checkbox("Background", &displayBackground);
@@ -2074,7 +2088,7 @@ public:
 		}
 		
 		recordCommandBuffer();
-		//m_dynamicCloud->UpdateUniformBuffers();
+		//m_DynamicSky->UpdateUniformBuffers();
 
 		// Update UBOs
 		updateUniformBuffers();

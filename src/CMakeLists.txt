@@ -4,8 +4,7 @@ file(GLOB SOURCE *.cpp ${BASE_HEADERS})
 file(GLOB SHADERS "../data/shaders/*.vert" "../data/shaders/*.frag" "../data/shaders/*.comp" "../data/shaders/*.geom" "../data/shaders/*.tesc" "../data/shaders/*.tese")
 file(GLOB SHADER_INCLUDES "../data/shaders/includes/*.glsl")
 
-
-file(GLOB CLOUD_INCLUDES "./DynamicCloud.cpp" "./DynamicCloud.h")
+file(GLOB CLOUD_INCLUDES "./DynamicSky.cpp" "./DynamicSky.h")
 
 source_group("Cloud" FILES ${CLOUD_INCLUDES})
 

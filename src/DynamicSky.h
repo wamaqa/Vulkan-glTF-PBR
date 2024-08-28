@@ -31,7 +31,7 @@ struct CloudUBO
 {
 	glm::vec3 skyColor = glm::vec3(0.081f, 0.151f, 0.488f);
 	glm::vec3 sunColor = glm::vec3(0.9f, 0.81f, 0.71f);
-	glm::vec3 lightDir = glm::vec3(1.0f, 0.3f, 0.1f);
+	glm::vec3 sunDir = glm::vec3(1.0f, 0.3f, 0.1f);
 	/// <summary>
 	/// 云层高度
 	/// </summary>

@@ -3,6 +3,9 @@
 #endif
 
 #define PI 3.14159265359
+#define STEPS 256
+#define EPS (2.0/iResolution.x)
+#define FAR 6.0
 
 layout(set = 0, binding = 0) uniform UBO
 {
@@ -28,6 +31,9 @@ layout(set = 0, binding = 2) uniform CloudParams{
 	float sunColourX;
 	float sunColourY;
 	float sunColourZ;
+	float sunDirX;
+	float sunDirY;
+	float sunDirZ;
 	float height;
 	float resolutionX;
 	float resolutionY;
